@@ -65,3 +65,7 @@ mobile_response.json
 modelslab_test_results.json
 replicate_test_images/
 uploads/
+
+# Gradle wrapper caches
+gradle-wrapper-dists/
+Other/gradle-wrapper-dists/
