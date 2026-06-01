@@ -18,7 +18,9 @@ class LocalComfyProvider(
 ) : ComfyUIProvider {
 
     private val TAG = "LocalComfyProvider"
-    private val baseEndpoint = endpointUrl.trimEnd('/')
+    private val baseEndpoint = endpointUrl.trimEnd('/').let {
+        if (!it.startsWith("http://") && !it.startsWith("https://")) "http://$it" else it
+    }
 
     override suspend fun uploadImage(imageBytes: ByteArray): String {
         return try {

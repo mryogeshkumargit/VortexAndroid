@@ -25,7 +25,9 @@ data class ImageEditingRequest(
     val outputFormat: String = "webp",
     val enhancePrompt: Boolean = false,
     val outputQuality: Int = 80,
-    val checkpointOverride: String? = null
+    val checkpointOverride: String? = null,
+    val loraOverride: String? = null,
+    val loraStrengthOverride: Float? = null
 )
 
 data class ImageEditingResult(
@@ -739,6 +741,15 @@ class ImageEditingService @Inject constructor(
             
             request.checkpointOverride?.let { ckptName ->
                 com.vortexai.android.domain.comfy.v2.GraphTransformationEngine.injectCheckpoint(graph, ckptName)
+            }
+            
+            request.loraOverride?.let { loraName ->
+                com.vortexai.android.domain.comfy.v2.GraphTransformationEngine.swapSpecificLora(
+                    graph = graph, 
+                    targetLoraToReplace = "QWEN_EDIT_ACTION_V1.safetensors",
+                    newLora = loraName,
+                    newWeight = request.loraStrengthOverride ?: 1.0f
+                )
             }
             
             // 6) Validate Graph Structurally

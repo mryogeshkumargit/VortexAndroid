@@ -842,6 +842,26 @@ class SettingsViewModel @Inject constructor(
     fun updateEmailNotifications(enabled: Boolean) { _uiState.value = _uiState.value.copy(emailNotifications = enabled); saveBackupSettings() }
     fun updateExperimentalFeaturesEnabled(enabled: Boolean) { _uiState.value = _uiState.value.copy(experimentalFeaturesEnabled = enabled); saveBackupSettings() }
     
+    fun updateComfyUiEditingWorkflow(workflow: String) {
+        _uiState.value = _uiState.value.copy(comfyUiEditingWorkflow = workflow)
+        saveImageEditingSettings()
+    }
+    
+    fun updateComfyUiEditingLora(lora: String) {
+        _uiState.value = _uiState.value.copy(comfyUiEditingLora = lora)
+        saveImageEditingSettings()
+    }
+    
+    fun updateComfyUiEditingLoraStrength(strength: Float) {
+        _uiState.value = _uiState.value.copy(comfyUiEditingLoraStrength = strength)
+        saveImageEditingSettings()
+    }
+    
+    fun updateComfyUiEditingUseLora(useLora: Boolean) {
+        _uiState.value = _uiState.value.copy(comfyUiEditingUseLora = useLora)
+        saveImageEditingSettings()
+    }
+
     fun updateComfyUiEditingCheckpoint(checkpoint: String) {
         _uiState.value = _uiState.value.copy(comfyUiEditingCheckpoint = checkpoint)
     }
@@ -1603,7 +1623,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
     fun updateComfyUiEditingEndpoint(endpoint: String) { _uiState.value = _uiState.value.copy(comfyUiEditingEndpoint = endpoint); saveImageEditingSettings() }
-    fun updateComfyUiEditingWorkflow(workflow: String) { _uiState.value = _uiState.value.copy(comfyUiEditingWorkflow = workflow); saveImageEditingSettings() }
     fun updateComfyUiMaintainAspectRatio(maintain: Boolean) { _uiState.value = _uiState.value.copy(comfyUiMaintainAspectRatio = maintain); saveImageEditingSettings() }
     
     fun loadAvailableComfyUiEditingWorkflows(context: Context) {
@@ -1612,6 +1631,30 @@ class SettingsViewModel @Inject constructor(
                 val workflowsDir = java.io.File(context.filesDir, "comfy_workflows")
                 if (!workflowsDir.exists()) {
                     workflowsDir.mkdirs()
+                }
+                
+                // Remove the old workflow if it exists
+                val oldWorkflowFile = java.io.File(workflowsDir, "qwen_image_edit_2511 (2).json")
+                if (oldWorkflowFile.exists()) {
+                    oldWorkflowFile.delete()
+                }
+                
+                // Copy bundled workflows from assets
+                try {
+                    val assetManager = context.assets
+                    val bundledFiles = assetManager.list("comfy_workflows") ?: emptyArray()
+                    for (file in bundledFiles) {
+                        val destFile = java.io.File(workflowsDir, file)
+                        if (!destFile.exists()) {
+                            assetManager.open("comfy_workflows/$file").use { input ->
+                                destFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("SettingsViewModel", "Error copying bundled workflows", e)
                 }
                 
                 val userFiles = workflowsDir.listFiles { _, name -> name.endsWith(".json") }
@@ -1636,6 +1679,56 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
+    fun updateComfyUiMode(mode: String) {
+        _uiState.value = _uiState.value.copy(comfyUiMode = mode)
+        saveImageSettings()
+    }
+    
+    fun updateComfyUiEditingMode(mode: String) {
+        _uiState.value = _uiState.value.copy(comfyUiEditingMode = mode)
+        saveImageEditingSettings()
+    }
+    
+    fun saveDownloadedComfyUiWorkflow(context: Context, jsonContent: String, originalFileName: String, isEditing: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cleanFileName = originalFileName.replace("📤 ", "").replace("📁 ", "")
+                var finalName = cleanFileName
+                if (!finalName.endsWith(".json", ignoreCase = true)) {
+                    finalName = "$finalName.json"
+                }
+
+                val workflowsDir = java.io.File(context.filesDir, "comfy_workflows")
+                if (!workflowsDir.exists()) {
+                    workflowsDir.mkdirs()
+                }
+                
+                val destFile = java.io.File(workflowsDir, finalName)
+                destFile.writeText(jsonContent)
+                
+                withContext(Dispatchers.Main) {
+                    if (isEditing) {
+                        loadAvailableComfyUiEditingWorkflows(context)
+                        updateComfyUiEditingWorkflow(finalName)
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            comfyUiCustomWorkflow = jsonContent,
+                            comfyUiWorkflowFileName = finalName
+                        )
+                        saveImageSettings()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("SettingsViewModel", "Error saving downloaded ComfyUI workflow", e)
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(
+                        endpointError = "Failed to save workflow: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
     fun importComfyUiEditingWorkflow(context: Context, uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -1693,6 +1786,9 @@ class SettingsViewModel @Inject constructor(
                 preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_endpoint")] = _uiState.value.comfyUiEditingEndpoint
                 preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_workflow")] = _uiState.value.comfyUiEditingWorkflow
                 preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_checkpoint")] = _uiState.value.comfyUiEditingCheckpoint
+                preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_lora")] = _uiState.value.comfyUiEditingLora
+                preferences[androidx.datastore.preferences.core.floatPreferencesKey("comfyui_editing_lora_strength")] = _uiState.value.comfyUiEditingLoraStrength
+                preferences[androidx.datastore.preferences.core.booleanPreferencesKey("comfyui_editing_use_lora")] = _uiState.value.comfyUiEditingUseLora
                 preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_custom_workflow")] = _uiState.value.comfyUiCustomWorkflow
                 preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_negative_prompt")] = _uiState.value.comfyUiNegativePrompt
                 preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_workflow_filename")] = _uiState.value.comfyUiWorkflowFileName

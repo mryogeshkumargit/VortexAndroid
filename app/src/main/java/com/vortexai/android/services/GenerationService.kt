@@ -192,8 +192,12 @@ class GenerationService : Service() {
                             completeGeneration(generationId, "ai", characterName, message.content)
                         },
                         onFailure = { e ->
-                            android.util.Log.e("GenerationService", "Failed to generate/save AI response", e)
-                            completeGeneration(generationId, "ai", characterName, "Error: ${e.message}")
+                            if (e !is kotlinx.coroutines.CancellationException) {
+                                android.util.Log.e("GenerationService", "Failed to generate/save AI response", e)
+                                completeGeneration(generationId, "ai", characterName, "Error: ${e.message}")
+                            } else {
+                                throw e
+                            }
                         }
                     )
                 }
@@ -201,6 +205,7 @@ class GenerationService : Service() {
                 android.util.Log.e("GenerationService", "AI generation timed out after 5 minutes")
                 completeGeneration(generationId, "ai", characterName, "Error: Generation timed out")
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 android.util.Log.e("GenerationService", "AI generation failed", e)
                 completeGeneration(generationId, "ai", characterName, "Error: ${e.message}")
             }
@@ -245,25 +250,29 @@ class GenerationService : Service() {
                             completeGeneration(generationId, "image", "Image", prompt)
                         },
                         onFailure = { e ->
-                            android.util.Log.e("GenerationService", "Image generation failed", e)
-                            val errorMsg = "Error: ${e.message}"
-                            serviceScope.launch {
-                                conversationManager.insertMessageDirectly(com.vortexai.android.data.models.Message(
-                                    id = generationId,
-                                    conversationId = conversationId,
-                                    content = errorMsg,
-                                    role = "system",
-                                    senderType = "system",
-                                    timestamp = System.currentTimeMillis(),
-                                    messageType = "image",
-                                    metadataJson = org.json.JSONObject().apply {
-                                        put("modelUsed", "error")
-                                    }.toString(),
-                                    createdAt = System.currentTimeMillis(),
-                                    updatedAt = System.currentTimeMillis()
-                                ))
+                            if (e !is kotlinx.coroutines.CancellationException) {
+                                android.util.Log.e("GenerationService", "Image generation failed", e)
+                                val errorMsg = "Error: ${e.message}"
+                                serviceScope.launch {
+                                    conversationManager.insertMessageDirectly(com.vortexai.android.data.models.Message(
+                                        id = generationId,
+                                        conversationId = conversationId,
+                                        content = errorMsg,
+                                        role = "system",
+                                        senderType = "system",
+                                        timestamp = System.currentTimeMillis(),
+                                        messageType = "image",
+                                        metadataJson = org.json.JSONObject().apply {
+                                            put("modelUsed", "error")
+                                        }.toString(),
+                                        createdAt = System.currentTimeMillis(),
+                                        updatedAt = System.currentTimeMillis()
+                                    ))
+                                }
+                                completeGeneration(generationId, "image", "Image", errorMsg)
+                            } else {
+                                throw e
                             }
-                            completeGeneration(generationId, "image", "Image", errorMsg)
                         }
                     )
                 }
@@ -286,6 +295,7 @@ class GenerationService : Service() {
                 }
                 completeGeneration(generationId, "image", "Image", errorMsg)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 android.util.Log.e("GenerationService", "Image generation failed", e)
                 val errorMsg = "Error: ${e.message}"
                 serviceScope.launch {

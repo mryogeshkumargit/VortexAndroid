@@ -27,10 +27,10 @@ object GraphTransformationEngine {
             // Ex: CLIPTextEncode -> "text"
             // SDXL Encoder -> "text_l", "text_g"
             
-            // First try updating existing "text" keys
+            // First try updating existing "text" or "prompt" keys
             var injected = false
             node.parameters.keys.toList().forEach { key ->
-                if (key.lowercase().contains("text")) {
+                if (key.lowercase().contains("text") || key.lowercase().contains("prompt")) {
                     node.parameters[key] = text
                     injected = true
                     Log.d(TAG, "Injected ${targetRole.name} text into Parameter '$key' on Node ${node.id}")
@@ -53,6 +53,18 @@ object GraphTransformationEngine {
         matches.forEach { node ->
             node.parameters["image"] = filename
             Log.d(TAG, "Injected Image filename into IMAGE_INPUT (Node ${node.id})")
+        }
+    }
+
+    /**
+     * Injects image dimensions into the LATENT_INITIALIZER node.
+     */
+    fun injectDimensions(graph: CanonicalGraph, width: Int, height: Int) {
+        val matches = graph.nodes.values.filter { it.role == NodeRole.LATENT_INITIALIZER }
+        matches.forEach { node ->
+            node.parameters["width"] = width
+            node.parameters["height"] = height
+            Log.d(TAG, "Injected dimensions (${width}x${height}) into LATENT_INITIALIZER (Node ${node.id})")
         }
     }
 
@@ -168,5 +180,22 @@ object GraphTransformationEngine {
         graph.nodes[loraNodeId] = loraNode
         
         Log.d(TAG, "Safely transformed graph: Sandwiched LoraLoader($loraName) under Node ${loader.id}")
+    }
+
+    /**
+     * Replaces a specific LoRA name inside existing LoraLoader nodes with a new one.
+     */
+    fun swapSpecificLora(graph: CanonicalGraph, targetLoraToReplace: String, newLora: String, newWeight: Float) {
+        if (newLora.isBlank()) return
+        val matches = graph.nodes.values.filter { it.type == "LoraLoader" || it.type == "LoraLoaderModelOnly" }
+        matches.forEach { node ->
+            val currentLoraName = node.parameters["lora_name"]?.toString() ?: ""
+            if (currentLoraName == targetLoraToReplace || currentLoraName.endsWith("\\$targetLoraToReplace") || currentLoraName.endsWith("/$targetLoraToReplace")) {
+                node.parameters["lora_name"] = newLora
+                node.parameters["strength_model"] = newWeight
+                node.parameters["strength_clip"] = newWeight
+                Log.d(TAG, "Swapped LoRA '$currentLoraName' for '$newLora' in Node ${node.id}")
+            }
+        }
     }
 }

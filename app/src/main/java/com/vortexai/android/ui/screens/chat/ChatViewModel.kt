@@ -457,21 +457,23 @@ class ChatViewModel @Inject constructor(
                     _uiState.update { state ->
                         state.copy(
                             isGeneratingImage = false,
-                            messages = state.messages.filter { it.id != generationId }
+                            messages = state.messages.filter { !(it.id == generationId && it.metadata?.modelUsed == "generating_image") }
                         )
-                    }
-                    viewModelScope.launch {
-                        conversationManager.deleteMessage(generationId)
                     }
                     break
                 }
             }
             
-            _uiState.update { state ->
-                state.copy(
-                    isGeneratingImage = false,
-                    messages = state.messages.filter { it.id != generationId }
-                )
+            if (attempts >= maxAttempts) {
+                _uiState.update { state ->
+                    state.copy(
+                        isGeneratingImage = false,
+                        messages = state.messages.filter { it.id != generationId }
+                    )
+                }
+                viewModelScope.launch {
+                    conversationManager.deleteMessage(generationId)
+                }
             }
         }
     }

@@ -49,7 +49,28 @@ class ImageSettingsManager @Inject constructor(
             manuallyAddedHuggingFaceImageModels = preferences[stringPreferencesKey("manually_added_huggingface_image_models")]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
             manuallyAddedCustomImageModels = preferences[stringPreferencesKey("manually_added_custom_image_models")]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
             selectedCustomImageProviderId = preferences[stringPreferencesKey("selected_custom_image_provider_id")] ?: "",
-            selectedCustomImageEditProviderId = preferences[stringPreferencesKey("selected_custom_image_edit_provider_id")] ?: ""
+            selectedCustomImageEditProviderId = preferences[stringPreferencesKey("selected_custom_image_edit_provider_id")] ?: "",
+            imageEditingProvider = preferences[stringPreferencesKey("image_editing_provider")] ?: "Together AI",
+            comfyUiEditingEndpoint = preferences[stringPreferencesKey("comfyui_editing_endpoint")] ?: "",
+            comfyUiEditingWorkflow = preferences[stringPreferencesKey("comfyui_editing_workflow")] ?: "",
+            comfyUiEditingCheckpoint = preferences[stringPreferencesKey("comfyui_editing_checkpoint")] ?: "",
+            comfyUiEditingLora = preferences[stringPreferencesKey("comfyui_editing_lora")] ?: "",
+            comfyUiEditingLoraStrength = preferences[androidx.datastore.preferences.core.floatPreferencesKey("comfyui_editing_lora_strength")] ?: 1.0f,
+            comfyUiEditingUseLora = preferences[androidx.datastore.preferences.core.booleanPreferencesKey("comfyui_editing_use_lora")] ?: false,
+            comfyUiCustomWorkflow = preferences[stringPreferencesKey("comfyui_custom_workflow")] ?: "",
+            comfyUiNegativePrompt = preferences[stringPreferencesKey("comfyui_negative_prompt")] ?: "",
+            comfyUiWorkflowFileName = preferences[stringPreferencesKey("comfyui_workflow_filename")] ?: "",
+            replicateEditingApiKey = preferences[stringPreferencesKey("replicate_editing_api_key")] ?: "",
+            replicateEditingModel = preferences[stringPreferencesKey("replicate_editing_model")] ?: "qwen-image-edit",
+            togetherAiEditingApiKey = preferences[stringPreferencesKey("together_ai_editing_api_key")] ?: "",
+            imageEditingModel = preferences[stringPreferencesKey("image_editing_model")] ?: "black-forest-labs/FLUX.1-kontext-dev",
+            imageEditingStrength = preferences[stringPreferencesKey("image_editing_strength")] ?: "Medium (0.5)",
+            modelslabEditingApiKey = preferences[stringPreferencesKey("modelslab_editing_api_key")] ?: "",
+            modelslabEditingModel = preferences[stringPreferencesKey("modelslab_editing_model")] ?: "flux-kontext-dev",
+            modelslabEditingStrength = preferences[stringPreferencesKey("modelslab_editing_strength")] ?: "High (0.7)",
+            modelslabEditingStrengthFloat = preferences[androidx.datastore.preferences.core.floatPreferencesKey("modelslab_editing_strength_float")] ?: 0.7f,
+            imgbbApiKey = preferences[stringPreferencesKey("imgbb_api_key")] ?: "",
+            modelslabNegativePrompt = preferences[stringPreferencesKey("modelslab_negative_prompt")] ?: "(worst quality:2), (low quality:2), (normal quality:2), (jpeg artifacts), (blurry), (duplicate), (morbid), (mutilated), (out of frame), (extra limbs), (bad anatomy), (disfigured), (deformed), (cross-eye), (glitch), (oversaturated), (overexposed), (underexposed), (bad proportions), (bad hands), (bad feet), (cloned face), (long neck), (missing arms), (missing legs), (extra fingers), (fused fingers), (poorly drawn hands), (poorly drawn face), (mutation), (deformed eyes), watermark, text, logo, signature, grainy, tiling, censored, nsfw, ugly, blurry eyes, noisy image, bad lighting, unnatural skin, asymmetry"
         )
     }
 

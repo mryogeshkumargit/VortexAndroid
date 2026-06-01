@@ -297,6 +297,20 @@ private fun HuggingFaceImageConfig(uiState: SettingsUiState, viewModel: Settings
 
 @Composable
 private fun ComfyUIConfig(uiState: SettingsUiState, viewModel: SettingsViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showWorkflowImportDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    if (showWorkflowImportDialog) {
+        com.vortexai.android.ui.screens.settings.WorkflowServerImportDialog(
+            viewModel = viewModel,
+            onDismiss = { showWorkflowImportDialog = false },
+            onImport = { jsonContent, fileName ->
+                viewModel.saveDownloadedComfyUiWorkflow(context, jsonContent, fileName, isEditing = false)
+                showWorkflowImportDialog = false
+            }
+        )
+    }
+
     SettingsTextFieldItem(
         title = "ComfyUI Endpoint",
         value = uiState.comfyUiEndpoint,
@@ -318,6 +332,16 @@ private fun ComfyUIConfig(uiState: SettingsUiState, viewModel: SettingsViewModel
         }
     }
     
+    // ComfyUI Mode Selection
+    SettingsDropdownItem(
+        title = "Operation Mode",
+        description = "Choose how ComfyUI generates images",
+        selectedValue = uiState.comfyUiMode,
+        options = listOf("Advanced", "Workflow"),
+        onValueChange = viewModel::updateComfyUiMode
+    )
+    
+    if (uiState.comfyUiMode == "Advanced") {
     // Model Selection
     if (uiState.comfyUiModels.isNotEmpty()) {
         SettingsDropdownItem(
@@ -423,7 +447,9 @@ private fun ComfyUIConfig(uiState: SettingsUiState, viewModel: SettingsViewModel
         onValueChange = viewModel::updateComfyUiNegativePrompt,
         placeholder = "What to avoid in the image (e.g., bad quality, blurry, distorted)"
     )
+    } // End of Advanced Mode check
     
+    if (uiState.comfyUiMode == "Workflow") {
     // Custom Workflow File Browser
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
@@ -458,6 +484,15 @@ private fun ComfyUIConfig(uiState: SettingsUiState, viewModel: SettingsViewModel
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Browse")
             }
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(
+                onClick = { showWorkflowImportDialog = true }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CloudDownload,
+                    contentDescription = "Fetch PC"
+                )
+            }
         }
         
         if (uiState.comfyUiCustomWorkflow.isNotBlank()) {
@@ -469,6 +504,7 @@ private fun ComfyUIConfig(uiState: SettingsUiState, viewModel: SettingsViewModel
             )
         }
     }
+    } // End of Workflow Mode check
 }
 
 @Composable

@@ -33,7 +33,7 @@ object SemanticRoleInferencer {
                     node.role = NodeRole.SAMPLER_CORE
                 }
                 // TEXT ENCODERS
-                classType.contains("cliptextencode") || classType.contains("effnettextencode") -> {
+                classType.contains("cliptextencode") || classType.contains("effnettextencode") || classType.contains("textencodeqwen") -> {
                     // Check tags for negative/positive hints
                     val tagsLower = node.tags.joinToString(" ").lowercase()
                     if (tagsLower.contains("negative") || tagsLower.contains("neg")) {
@@ -52,7 +52,7 @@ object SemanticRoleInferencer {
                     node.role = NodeRole.IMAGE_OUTPUT
                 }
                 // LATENT
-                classType.contains("emptylatentimage") -> {
+                classType.contains("emptylatentimage") || (classType.contains("empty") && classType.contains("latent")) -> {
                     node.role = NodeRole.LATENT_INITIALIZER
                 }
             }

@@ -610,12 +610,21 @@ class ChatImageGenerator @Inject constructor(
                         }
                     }
                     
-                    val checkpointOverride = preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_checkpoint")]
+                    val isCustomEditingWorkflow = workflowJson.trim().startsWith("{")
+                    
+                    val checkpointOverrideRaw = preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_checkpoint")]
+                    val checkpointOverride = if (isCustomEditingWorkflow) null else checkpointOverrideRaw
+                    
+                    val useLora = preferences[androidx.datastore.preferences.core.booleanPreferencesKey("comfyui_editing_use_lora")] ?: false
+                    val loraModel = preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_lora")]
+                    val loraStrength = preferences[androidx.datastore.preferences.core.floatPreferencesKey("comfyui_editing_lora_strength")] ?: 1.0f
                     
                     val editingRequest = ImageEditingRequest(
                         imageBase64 = inputImageBase64,
                         prompt = prompt,
-                        checkpointOverride = if (checkpointOverride.isNullOrBlank()) null else checkpointOverride
+                        checkpointOverride = if (checkpointOverride.isNullOrBlank()) null else checkpointOverride,
+                        loraOverride = if (useLora && !loraModel.isNullOrBlank()) loraModel else null,
+                        loraStrengthOverride = if (useLora) loraStrength else null
                     )
                     
                     val editingResult = imageEditingService.editImage(
@@ -754,14 +763,25 @@ class ChatImageGenerator @Inject constructor(
             withContext(Dispatchers.IO) {
                 val imageId = "${conversationId}_${System.currentTimeMillis()}"
                 val request = okhttp3.Request.Builder().url(cloudUrl).build()
-                val response = okhttp3.OkHttpClient().newCall(request).execute()
+                // Use a client with a longer timeout for downloads
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                val response = client.newCall(request).execute()
                 
                 if (response.isSuccessful) {
                     val imageBytes = response.body?.bytes()
                     imageBytes?.let {
-                        imageStorageHelper.saveCharacterImage(imageId, it)
+                        val path = imageStorageHelper.saveCharacterImage(imageId, it)
+                        if (path != null && !path.startsWith("file://") && !path.startsWith("content://") && !path.startsWith("http")) {
+                            "file://$path"
+                        } else path
                     }
-                } else null
+                } else {
+                    Log.e(TAG, "Download failed with code: ${response.code}")
+                    null
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to download and save image: ${e.message}")

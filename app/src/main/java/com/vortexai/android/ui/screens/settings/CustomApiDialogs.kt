@@ -1125,3 +1125,230 @@ fun TestConnectionDialog(
         }
     )
 }
+@Composable
+fun WorkflowServerImportDialog(
+    viewModel: SettingsViewModel,
+    onDismiss: () -> Unit,
+    onImport: (String, String) -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var serverUrl by remember { mutableStateOf(uiState.importServerUrl) }
+    var selectedFile by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var availableFiles by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var isLoadingFiles by remember { mutableStateOf(false) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+    var showQrScanner by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    
+    fun loadFileList() {
+        if (serverUrl.isBlank()) return
+        isLoadingFiles = true
+        errorMessage = ""
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val url = if (serverUrl.endsWith("/")) "${serverUrl}api/files" else "$serverUrl/api/files"
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                val request = okhttp3.Request.Builder().url(url).get().build()
+                val response = client.newCall(request).execute()
+                
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (response.isSuccessful) {
+                        val jsonArray = org.json.JSONArray(response.body?.string() ?: "[]")
+                        val filesList = mutableListOf<Pair<String, String>>()
+                        for (i in 0 until jsonArray.length()) {
+                            val obj = jsonArray.getJSONObject(i)
+                            filesList.add(Pair(obj.getString("name"), obj.getString("path")))
+                        }
+                        availableFiles = filesList.filter { it.first.contains(".json", ignoreCase = true) }
+                        isLoadingFiles = false
+                    } else {
+                        errorMessage = "Failed to load files: HTTP ${response.code}"
+                        isLoadingFiles = false
+                    }
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    errorMessage = "Error: ${e.message}"
+                    isLoadingFiles = false
+                }
+            }
+        }
+    }
+    
+    fun downloadFile() {
+        if (serverUrl.isBlank() || selectedFile == null) return
+        isDownloading = true
+        errorMessage = ""
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val url = if (serverUrl.endsWith("/")) "${serverUrl}download/${selectedFile!!.second}" else "$serverUrl/download/${selectedFile!!.second}"
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                val request = okhttp3.Request.Builder().url(url).get().build()
+                val response = client.newCall(request).execute()
+                
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (response.isSuccessful) {
+                        onImport(response.body?.string() ?: "", selectedFile!!.first)
+                    } else {
+                        errorMessage = "Failed: HTTP ${response.code}"
+                        isDownloading = false
+                    }
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    errorMessage = "Error: ${e.message}"
+                    isDownloading = false
+                }
+            }
+        }
+    }
+    
+    if (showQrScanner) {
+        com.vortexai.android.ui.components.QRCodeScanner(
+            onQRCodeScanned = { scannedUrl ->
+                serverUrl = scannedUrl
+                showQrScanner = false
+                loadFileList()
+            },
+            onDismiss = { showQrScanner = false }
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Import from Server") },
+            text = {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "Import workflow from file_transfer_server.py",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        OutlinedButton(
+                            onClick = { showQrScanner = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Scan QR Code")
+                        }
+                    }
+                    item {
+                        Text(
+                            text = "OR",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = serverUrl,
+                                onValueChange = { 
+                                    serverUrl = it
+                                    viewModel.updateImportServerUrl(it)
+                                },
+                                label = { Text("Server URL") },
+                                placeholder = { Text("http://192.168.1.100:8000") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            IconButton(
+                                onClick = { loadFileList() },
+                                enabled = serverUrl.isNotBlank() && !isLoadingFiles
+                            ) {
+                                if (isLoadingFiles) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                                } else {
+                                    Icon(Icons.Default.Refresh, "Load Files")
+                                }
+                            }
+                        }
+                    }
+                    if (availableFiles.isNotEmpty()) {
+                        item {
+                            var expanded by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(
+                                expanded = expanded,
+                                onExpandedChange = { expanded = it }
+                            ) {
+                                OutlinedTextField(
+                                    value = selectedFile?.first ?: "",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Select File") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = expanded,
+                                    onDismissRequest = { expanded = false }
+                                ) {
+                                    availableFiles.forEach { file ->
+                                        DropdownMenuItem(
+                                            text = { Text(file.first) },
+                                            onClick = {
+                                                selectedFile = file
+                                                expanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (errorMessage.isNotBlank()) {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                )
+                            ) {
+                                Text(
+                                    text = errorMessage,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { downloadFile() },
+                    enabled = selectedFile != null && !isDownloading
+                ) {
+                    if (isDownloading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text("Download & Import")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+

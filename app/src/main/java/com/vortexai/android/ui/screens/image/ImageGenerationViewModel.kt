@@ -98,10 +98,12 @@ class ImageGenerationViewModel @Inject constructor(
                     "Together AI" -> preferences[SettingsViewModel.TOGETHER_AI_EDITING_API_KEY] ?: ""
                     "Replicate" -> preferences[SettingsViewModel.REPLICATE_EDITING_API_KEY] ?: ""
                     "Modelslab" -> preferences[androidx.datastore.preferences.core.stringPreferencesKey("modelslab_editing_api_key")] ?: ""
+                    "ComfyUI" -> preferences[SettingsViewModel.COMFYUI_ENDPOINT_KEY] ?: ""
                     else -> ""
                 }
                 
-                if (apiKey.isBlank()) {
+                val requiresApiKey = imageEditingProvider in listOf("Together AI", "Replicate", "Modelslab", "Grok")
+                if (requiresApiKey && apiKey.isBlank()) {
                     _uiState.update { 
                         it.copy(
                             isLoading = false,
@@ -109,6 +111,20 @@ class ImageGenerationViewModel @Inject constructor(
                         )
                     }
                     return@launch
+                }
+                
+                // For ComfyUI, check endpoint
+                if (imageEditingProvider == "ComfyUI") {
+                    val customEndpoint = preferences[SettingsViewModel.COMFYUI_ENDPOINT_KEY] ?: ""
+                    if (customEndpoint.isBlank()) {
+                        _uiState.update { 
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = "No endpoint configured for ComfyUI. Please check your image editing settings."
+                            )
+                        }
+                        return@launch
+                    }
                 }
                 
                 // Convert local image to base64
@@ -124,7 +140,7 @@ class ImageGenerationViewModel @Inject constructor(
                 }
                 
                 // Get model and strength settings
-                val editingModel = when (imageEditingProvider) {
+                var editingModel = when (imageEditingProvider) {
                     "Together AI" -> preferences[SettingsViewModel.IMAGE_EDITING_MODEL_KEY] ?: "black-forest-labs/FLUX.1-kontext-dev"
                     "Replicate" -> preferences[SettingsViewModel.REPLICATE_EDITING_MODEL_KEY] ?: "qwen-image-edit"
                     "Modelslab" -> preferences[androidx.datastore.preferences.core.stringPreferencesKey("modelslab_editing_model")] ?: "flux-kontext-dev"
@@ -139,9 +155,45 @@ class ImageGenerationViewModel @Inject constructor(
                     else -> 0.5f
                 }
                 
+                var finalLoraOverride: String? = null
+                var finalLoraStrength: Float? = null
+                var finalCheckpointOverride: String? = null
+                
+                if (imageEditingProvider == "ComfyUI") {
+                    var workflowJson = preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_workflow")] ?: ""
+                    if (workflowJson.isBlank() || workflowJson == "Flux2-Klein Image Edit") {
+                        workflowJson = "Flux2-Klein Image Edit"
+                    } else if (workflowJson.endsWith(".json", ignoreCase = true)) {
+                        try {
+                            val workflowsDir = java.io.File(appContext.filesDir, "comfy_workflows")
+                            val file = java.io.File(workflowsDir, workflowJson)
+                            if (file.exists()) {
+                                workflowJson = file.readText()
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to read ComfyUI workflow: ${e.message}")
+                        }
+                    }
+                    editingModel = workflowJson
+                    
+                    val isCustomEditingWorkflow = workflowJson.trim().startsWith("{")
+                    val checkpointOverrideRaw = preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_checkpoint")]
+                    finalCheckpointOverride = if (isCustomEditingWorkflow) null else checkpointOverrideRaw
+                    
+                    val useLora = preferences[androidx.datastore.preferences.core.booleanPreferencesKey("comfyui_editing_use_lora")] ?: false
+                    val loraModel = preferences[androidx.datastore.preferences.core.stringPreferencesKey("comfyui_editing_lora")]
+                    val loraStrength = preferences[androidx.datastore.preferences.core.floatPreferencesKey("comfyui_editing_lora_strength")] ?: 1.0f
+                    
+                    finalLoraOverride = if (useLora && !loraModel.isNullOrBlank()) loraModel else null
+                    finalLoraStrength = if (useLora) loraStrength else null
+                }
+                
                 val imageEditingRequest = ImageEditingRequest(
                     imageBase64 = imageBase64,
-                    prompt = prompt
+                    prompt = prompt,
+                    checkpointOverride = finalCheckpointOverride,
+                    loraOverride = finalLoraOverride,
+                    loraStrengthOverride = finalLoraStrength
                 )
                 
                 val result = imageEditingService.editImage(

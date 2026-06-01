@@ -205,7 +205,30 @@ object ComfyUIConnectionTest {
                                         if (modelList != null) {
                                             for (i in 0 until modelList.length()) {
                                                 val modelName = modelList.optString(i)
-                                                if (modelName.isNotBlank()) {
+                                                if (modelName.isNotBlank() && !models.contains(modelName)) {
+                                                    models.add(modelName)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Get UNET models (e.g. Flux, SD3)
+                        val unetLoader = json.optJSONObject("UNETLoader")
+                        if (unetLoader != null) {
+                            val input = unetLoader.optJSONObject("input")
+                            if (input != null) {
+                                val required = input.optJSONObject("required")
+                                if (required != null) {
+                                    val unetName = required.optJSONArray("unet_name")
+                                    if (unetName != null && unetName.length() > 0) {
+                                        val modelList = unetName.optJSONArray(0)
+                                        if (modelList != null) {
+                                            for (i in 0 until modelList.length()) {
+                                                val modelName = modelList.optString(i)
+                                                if (modelName.isNotBlank() && !models.contains(modelName)) {
                                                     models.add(modelName)
                                                 }
                                             }

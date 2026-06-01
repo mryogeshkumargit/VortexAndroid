@@ -590,7 +590,30 @@ class ImageGenerationService @Inject constructor(
                                         if (modelList != null) {
                                             for (i in 0 until modelList.length()) {
                                                 val modelName = modelList.optString(i)
-                                                if (modelName.isNotBlank()) {
+                                                if (modelName.isNotBlank() && !models.contains(modelName)) {
+                                                    models.add(modelName)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Get UNET models (e.g. Flux, SD3)
+                        val unetLoader = json.optJSONObject("UNETLoader")
+                        if (unetLoader != null) {
+                            val input = unetLoader.optJSONObject("input")
+                            if (input != null) {
+                                val required = input.optJSONObject("required")
+                                if (required != null) {
+                                    val unetName = required.optJSONArray("unet_name")
+                                    if (unetName != null && unetName.length() > 0) {
+                                        val modelList = unetName.optJSONArray(0)
+                                        if (modelList != null) {
+                                            for (i in 0 until modelList.length()) {
+                                                val modelName = modelList.optString(i)
+                                                if (modelName.isNotBlank() && !models.contains(modelName)) {
                                                     models.add(modelName)
                                                 }
                                             }
@@ -921,11 +944,35 @@ class ImageGenerationService @Inject constructor(
         try {
             val cleanUrl = endpoint.removeSuffix("/")
             
-            // Load the appropriate workflow based on the request
-            val workflowJson = when (request.workflow) {
-                "Flux Dev" -> loadFluxWorkflow(request)
-                "SDXL" -> loadSDXLWorkflow(request)
-                else -> loadSDXLWorkflow(request) // Default to SDXL
+            val isCustomWorkflow = request.workflow != null && request.workflow.trim().startsWith("{")
+            
+            val workflowJson = if (isCustomWorkflow) {
+                try {
+                    val rawJson = request.workflow!!.trim()
+                    val graph = com.vortexai.android.domain.comfy.v2.ComfyGraphBuilder.parse(rawJson)
+                    com.vortexai.android.domain.comfy.v2.SemanticRoleInferencer.inferRoles(graph)
+                    com.vortexai.android.domain.comfy.v2.GraphTransformationEngine.injectPrompt(graph, request.prompt, false)
+                    if (request.negativePrompt != null) {
+                        com.vortexai.android.domain.comfy.v2.GraphTransformationEngine.injectPrompt(graph, request.negativePrompt, true)
+                    }
+                    request.seed?.let { 
+                        com.vortexai.android.domain.comfy.v2.GraphTransformationEngine.injectSeed(graph, it.toLong())
+                    }
+                    com.vortexai.android.domain.comfy.v2.GraphTransformationEngine.injectDimensions(graph, request.width, request.height)
+                    // For Workflow Mode, we DO NOT inject the checkpoint override
+                    // User requested: "pre provided model and lora mentioned in workflow"
+                    
+                    org.json.JSONObject(com.vortexai.android.domain.comfy.v2.ComfyGraphBuilder.compileToJson(graph))
+                } catch (e: Exception) {
+                    android.util.Log.e(TAG, "Error transforming custom workflow", e)
+                    org.json.JSONObject(request.workflow!!) // fallback to raw
+                }
+            } else {
+                when (request.workflow) {
+                    "Flux Dev" -> loadFluxWorkflow(request)
+                    "SDXL" -> loadSDXLWorkflow(request)
+                    else -> loadSDXLWorkflow(request) // Default to SDXL
+                }
             }
             
             // Submit the workflow to ComfyUI

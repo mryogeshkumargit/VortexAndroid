@@ -21,6 +21,7 @@ fun ImageEditingTab(
     viewModel: SettingsViewModel,
     onNavigateToCustomApi: () -> Unit = {}
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -223,7 +224,10 @@ fun ImageEditingTab(
         
         item {
             Button(
-                onClick = { viewModel.saveImageEditingSettings() },
+                onClick = { 
+                    viewModel.saveImageEditingSettings()
+                    android.widget.Toast.makeText(context, "Settings saved", android.widget.Toast.LENGTH_SHORT).show()
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Save Image Editing Settings")
@@ -319,12 +323,24 @@ private fun TogetherAIEditingConfig(uiState: SettingsUiState, viewModel: Setting
 @Composable
 private fun ComfyUIEditingConfig(uiState: SettingsUiState, viewModel: SettingsViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    var showWorkflowImportDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri: android.net.Uri? ->
         uri?.let {
             viewModel.importComfyUiEditingWorkflow(context, it)
         }
+    }
+
+    if (showWorkflowImportDialog) {
+        com.vortexai.android.ui.screens.settings.WorkflowServerImportDialog(
+            viewModel = viewModel,
+            onDismiss = { showWorkflowImportDialog = false },
+            onImport = { jsonContent, fileName ->
+                viewModel.saveDownloadedComfyUiWorkflow(context, jsonContent, fileName, isEditing = true)
+                showWorkflowImportDialog = false
+            }
+        )
     }
 
     SettingsTextFieldItem(
@@ -339,6 +355,20 @@ private fun ComfyUIEditingConfig(uiState: SettingsUiState, viewModel: SettingsVi
         viewModel.loadAvailableComfyUiEditingWorkflows(context)
     }
 
+    if (uiState.comfyUiEditingEndpoint.isNotBlank() && uiState.comfyUiLoraModels.isEmpty()) {
+        Button(
+            onClick = { viewModel.fetchComfyUiModels() },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            enabled = !uiState.isLoadingComfyUiModels
+        ) {
+            if (uiState.isLoadingComfyUiModels) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text("Fetch Available Models & LoRAs")
+        }
+    }
+
     if (uiState.availableComfyUiEditingWorkflows.isNotEmpty()) {
         SettingsDropdownItem(
             title = "Workflow Selection",
@@ -349,13 +379,6 @@ private fun ComfyUIEditingConfig(uiState: SettingsUiState, viewModel: SettingsVi
         )
     }
 
-    SettingsTextFieldItem(
-        title = "Model Checkpoint Options (Optional)",
-        value = uiState.comfyUiEditingCheckpoint,
-        onValueChange = viewModel::updateComfyUiEditingCheckpoint,
-        placeholder = "e.g. flux1-dev.safetensors"
-    )
-    
     androidx.compose.foundation.layout.Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End
@@ -368,7 +391,45 @@ private fun ComfyUIEditingConfig(uiState: SettingsUiState, viewModel: SettingsVi
             )
             Text("Import Custom (.json)")
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        androidx.compose.material3.IconButton(
+            onClick = { showWorkflowImportDialog = true }
+        ) {
+            Icon(
+                imageVector = androidx.compose.material.icons.Icons.Default.CloudDownload,
+                contentDescription = "Fetch PC"
+            )
+        }
     }
+
+    SettingsSwitchItem(
+        title = "Use LoRA",
+        description = "Enable LoRA blending for image generation",
+        checked = uiState.comfyUiEditingUseLora,
+        onCheckedChange = viewModel::updateComfyUiEditingUseLora
+    )
+    
+    if (uiState.comfyUiEditingUseLora && uiState.comfyUiLoraModels.isNotEmpty()) {
+        SettingsDropdownItem(
+            title = "LoRA Model",
+            description = "Choose a LoRA model for blending",
+            selectedValue = uiState.comfyUiEditingLora,
+            options = uiState.comfyUiLoraModels,
+            onValueChange = viewModel::updateComfyUiEditingLora,
+            searchable = true
+        )
+        
+        SettingsSliderItem(
+            title = "LoRA Strength",
+            description = "How strongly to apply the LoRA effect",
+            value = uiState.comfyUiEditingLoraStrength,
+            onValueChange = viewModel::updateComfyUiEditingLoraStrength,
+            valueRange = 0.0f..2.0f,
+            steps = 20,
+            displayValue = "%.2f".format(uiState.comfyUiEditingLoraStrength)
+        )
+    }
+
     SettingsSwitchItem(
         title = "Maintain Aspect Ratio",
         description = "Keep source image aspect ratio (resize if needed)",
